@@ -39,7 +39,7 @@ export class dimtown extends plugin {
             "• #壁纸 - 随机类型壁纸",
             "• #色色 #涩涩 #色图 - 随机色图",
               
-            "🎨 AI绘图功能：（暂时无法使用）",
+            "🎨 AI绘图功能：",
             "• #draw xxx- 文生图功能",
             "• #image xxx- 图生图功能",
             "• #re xxx- 重新执行上次绘制",

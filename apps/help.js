@@ -43,7 +43,8 @@ export class dimtown extends plugin {
             "• #draw xxx- 文生图功能",
             "• #image xxx- 图生图功能",
             "• #re xxx- 重新执行上次绘制",
-
+            
+            
             "📋 签到功能：",
             "• #🦌 打卡签到🦌",
             "• #戒🦌 打卡签到戒🦌",

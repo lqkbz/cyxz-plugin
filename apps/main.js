@@ -154,6 +154,10 @@ export class dimtown extends plugin {
                 {
                     reg: /^#?(次元|小镇|次元小镇|cy|xz|cyxz)?(色色|涩涩|色图)$/,
                     fnc: 'sex'
+                },
+                {
+                    reg: /^(.+)是啥杯$/,
+                    fnc: 'whatCup'
                 }
             ]
         })
@@ -277,6 +281,134 @@ export class dimtown extends plugin {
         return true;
     }
 
-
+    async whatCup(e) {
+        const match = e.msg.match(/^(.+)是啥杯$/);
+        if (!match) return false;
+        
+        const characterName = match[1];
+        
+        // 定义杯子等级配置
+        const cupLevels = [
+            {
+                name: '小杯',
+                versatility: '极差',
+                strategy: '极差', 
+                recommendation: '完全不建议任何玩家抽取',
+                images: [0, 1, 2, 3],
+                weight: 15 // 权重，决定出现概率
+            },
+            {
+                name: '小杯偏上',
+                versatility: '较差',
+                strategy: '极差',
+                recommendation: '完全不建议任何玩家抽取', 
+                images: [0, 1, 2, 3],
+                weight: 15
+            },
+            {
+                name: '中杯偏下',
+                versatility: '较差',
+                strategy: '较差',
+                recommendation: '完全不建议任何玩家抽取',
+                images: [4, 5, 7, 8],
+                weight: 20
+            },
+            {
+                name: '中杯',
+                versatility: ['较差', '一般'],
+                strategy: ['较差', '一般'],
+                recommendation: '不建议一般玩家抽取',
+                images: [4, 5, 7, 8],
+                weight: 20
+            },
+            {
+                name: '强力中杯',
+                versatility: '一般',
+                strategy: ['较差', '一般'],
+                recommendation: '不建议一般玩家抽取',
+                images: [4, 5, 7, 8],
+                weight: 15
+            },
+            {
+                name: '大杯',
+                versatility: '一般',
+                strategy: '一般',
+                recommendation: '建议蓟县玩家抽取',
+                images: [5, 6, 9, 10],
+                weight: 8
+            },
+            {
+                name: '大杯偏上',
+                versatility: '一般',
+                strategy: ['一般', '较强'],
+                recommendation: '建议一般玩家抽取',
+                images: [5, 6, 9, 10],
+                weight: 5
+            },
+            {
+                name: '超大杯',
+                versatility: '较强',
+                strategy: ['较强', '一般'],
+                recommendation: ['建议一般玩家抽取', '强烈建议所有玩家抽取'],
+                images: [11, 12, 13],
+                weight: 1.5
+            },
+            {
+                name: 'super~big~cup',
+                versatility: '很强',
+                strategy: '很强',
+                recommendation: '新神已至，要求所有玩家抽取',
+                images: [11, 12, 13],
+                weight: 0.5
+            }
+        ];
+        
+        // 根据权重随机选择杯子等级
+        const totalWeight = cupLevels.reduce((sum, level) => sum + level.weight, 0);
+        let randomNum = Math.random() * totalWeight;
+        let selectedLevel = cupLevels[0];
+        
+        for (const level of cupLevels) {
+            randomNum -= level.weight;
+            if (randomNum <= 0) {
+                selectedLevel = level;
+                break;
+            }
+        }
+        
+        // 从对应图片组中随机选择一张
+        const selectedImageIndex = selectedLevel.images[Math.floor(Math.random() * selectedLevel.images.length)];
+        
+        // 处理随机属性选择
+        const versatility = Array.isArray(selectedLevel.versatility) 
+            ? selectedLevel.versatility[Math.floor(Math.random() * selectedLevel.versatility.length)]
+            : selectedLevel.versatility;
+        
+        const strategy = Array.isArray(selectedLevel.strategy)
+            ? selectedLevel.strategy[Math.floor(Math.random() * selectedLevel.strategy.length)]
+            : selectedLevel.strategy;
+        
+        const recommendation = Array.isArray(selectedLevel.recommendation)
+            ? selectedLevel.recommendation[Math.floor(Math.random() * selectedLevel.recommendation.length)]
+            : selectedLevel.recommendation;
+        
+        // 构建回复消息
+        let replyText = `先说结论，${characterName}${versatility === '很强' ? '泛用性很强' : `泛用性${versatility}`}，对策性${strategy}，总的来说属于${selectedLevel.name}，${recommendation}`;
+        
+        try {
+            // 发送文字回复
+            await e.reply(replyText);
+            
+            // 发送对应的表情包图片
+            const imagePath = `./plugins/cyxz-plugin/resources/${selectedImageIndex}.jpg`;
+            await e.reply(segment.image(imagePath));
+            
+        } catch (error) {
+            logger.error('发送杯子评价时发生错误:', error.message);
+            e.reply('评价生成失败，请稍后重试');
+        }
+        
+        return true;
+    }
 
 }

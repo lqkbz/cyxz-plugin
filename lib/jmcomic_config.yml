@@ -1,0 +1,49 @@
+# JMComic 配置文件 - 支持PDF功能
+# 使用前需安装依赖: pip install img2pdf
+
+log: true
+
+client:
+  impl: api  # api(APP端不限IP) 或 html(网页端效率高)
+  retry_times: 5
+  postman:
+    meta_data:
+      proxies: system  # 使用系统代理
+      
+      # 如果需要登录，取消下面的注释并填入 cookies
+      # cookies:
+      #   AVS: your_avs_cookie_here
+
+download:
+  cache: true
+  image:
+    decode: true  # 还原混淆的图片
+    suffix: null  # 保持原格式
+  threading:
+    image: 30  # 同时下载 30 张图
+    photo: 8   # 同时下载 8 个章节
+
+dir_rule:
+  base_dir: ./download/
+  rule: "Bd / Atitle / Pindex"
+
+# ========================================
+# PDF 插件配置
+# ========================================
+plugins:
+  # after_album:
+    # 整本漫画合并为一个PDF文件（已禁用，使用章节模式）
+    # - plugin: img2pdf
+    #   kwargs:
+    #     pdf_dir: ./pdf/           # PDF存放文件夹
+    #     filename_rule: Atitle     # PDF命名规则 (Atitle=本子标题)
+    #     # encrypt:                # 可选：PDF加密
+    #     #   password: 123456
+  
+  after_photo:
+    # 每个章节生成一个PDF
+    - plugin: img2pdf
+      kwargs:
+        pdf_dir: ./pdf/
+        filename_rule: Ptitle   # 使用章节标题作为文件名（Ptitle）
+

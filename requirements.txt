@@ -1,0 +1,20 @@
+# JMComic PDF 下载插件 - Python 依赖
+
+# 核心库 - JMComic 漫画下载
+jmcomic>=1.0.0
+
+# PDF 转换插件
+img2pdf>=0.4.0
+
+# JMComic 的依赖（通常会自动安装，但明确列出更好）
+requests>=2.28.0
+lxml>=4.9.0
+Pillow>=9.0.0
+
+# PDF 处理（jmcomic img2pdf 插件使用）
+pikepdf>=8.0.0
+
+# 可选：如果使用代理
+# pysocks>=1.7.1
+
+

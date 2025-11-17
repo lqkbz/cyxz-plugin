@@ -44,6 +44,6 @@ plugins:
     # 每个章节生成一个PDF
     - plugin: img2pdf
       kwargs:
-        pdf_dir: ./pdf/
+        pdf_dir: pdf/           # PDF存放文件夹（不使用 ./ 前缀）
         filename_rule: Ptitle   # 使用章节标题作为文件名（Ptitle）
 

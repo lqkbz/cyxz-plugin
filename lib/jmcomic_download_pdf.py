@@ -198,11 +198,27 @@ def download_and_convert_to_pdf(album_id, config_file=None, start_chapter=1, end
             if pdf_files:
                 print(f"[INFO] 在 ./pdf/ 中找到PDF文件", file=sys.stderr)
         
+        # 尝试在 .pdf 隐藏目录中查找（可能配置解析问题导致）
+        if not pdf_files:
+            print(f"[WARN] 尝试在隐藏目录 ./.pdf/ 中查找", file=sys.stderr)
+            pdf_files = glob.glob('./.pdf/*.pdf')
+            if pdf_files:
+                print(f"[INFO] 在 ./.pdf/ 中找到PDF文件", file=sys.stderr)
+            
+            # 也尝试在配置文件目录下的 .pdf
+            if not pdf_files:
+                hidden_pdf_dir = os.path.join(config_dir, '.pdf')
+                pdf_files = glob.glob(os.path.join(hidden_pdf_dir, '*.pdf'))
+                if pdf_files:
+                    print(f"[INFO] 在 {hidden_pdf_dir} 中找到PDF文件", file=sys.stderr)
+        
         if not pdf_files:
             print(f"[ERROR] 已尝试以下位置:", file=sys.stderr)
             print(f"  1. {pdf_dir_abs}", file=sys.stderr)
             print(f"  2. {pdf_dir}", file=sys.stderr)
             print(f"  3. ./pdf/", file=sys.stderr)
+            print(f"  4. ./.pdf/ (隐藏目录)", file=sys.stderr)
+            print(f"  5. {os.path.join(config_dir, '.pdf')}", file=sys.stderr)
             raise Exception("未找到生成的PDF文件，请检查插件配置和路径")
         
         # 转换为绝对路径（确保后续可以正确访问和删除）

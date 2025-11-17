@@ -64,11 +64,18 @@ export class jmcomic_pdf extends plugin {
         await e.reply(`宝贝别急`);
         
         try {
-            // 调用 Python 脚本下载并转换PDF
+            // 创建临时目录用于保存PDF（确保NapCat可以访问）
+            const tempPdfDir = path.join(process.cwd(), 'data', 'jmcomic_temp');
+            if (!fs.existsSync(tempPdfDir)) {
+                fs.mkdirSync(tempPdfDir, { recursive: true });
+            }
+            logger.info(`[JMComic PDF] 临时PDF目录: ${tempPdfDir}`);
+            
+            // 调用 Python 脚本下载并转换PDF（直接下载到临时目录）
             const messageType = e.group ? '群聊' : e.friend ? '私聊' : '未知';
             logger.info(`[JMComic PDF] 用户 ${e.user_id} 在${messageType}中开始下载相册 ${albumId}（第${startChapter}-${endChapter}章）`);
             
-            const result = await downloadJmComicAsPDF(albumId, null, startChapter, endChapter);
+            const result = await downloadJmComicAsPDF(albumId, null, startChapter, endChapter, tempPdfDir);
             
             // 检查返回结果
             if (!result.pdf_files || result.pdf_files.length === 0) {
@@ -94,7 +101,7 @@ export class jmcomic_pdf extends plugin {
                 user_id: e.self_id
             });
             
-            // 添加每个PDF文件
+            // 添加每个PDF文件（已经直接保存到临时目录）
             for (let i = 0; i < result.pdf_files.length; i++) {
                 const pdfInfo = result.pdf_files[i];
                 const pdfPath = pdfInfo.path;
@@ -102,41 +109,20 @@ export class jmcomic_pdf extends plugin {
                 const pdfSizeMB = pdfInfo.size / 1024 / 1024;
                 
                 logger.info(`[JMComic PDF] 准备转发第 ${i+1}/${result.pdf_count} 章: ${pdfFilename}`);
-                logger.info(`[JMComic PDF] PDF原始路径: ${pdfPath}`);
+                logger.info(`[JMComic PDF] PDF路径: ${pdfPath}`);
+                logger.info(`[JMComic PDF] 文件存在: ${fs.existsSync(pdfPath)}`);
                 
                 // 验证文件是否存在
-                let actualPdfPath = pdfPath;
                 if (!fs.existsSync(pdfPath)) {
-                    logger.error(`[JMComic PDF] 文件不存在: ${pdfPath}`);
-                    
-                    // 尝试查找实际文件（文件名可能被修改）
-                    try {
-                        const pdfDir = path.dirname(pdfPath);
-                        const actualFiles = fs.readdirSync(pdfDir).filter(f => f.endsWith('.pdf'));
-                        logger.info(`[JMComic PDF] PDF目录中的实际文件: ${actualFiles.join(', ')}`);
-                        
-                        // 如果只有一个PDF文件，使用它
-                        if (actualFiles.length === 1) {
-                            actualPdfPath = path.join(pdfDir, actualFiles[0]);
-                            logger.info(`[JMComic PDF] 使用实际文件: ${actualPdfPath}`);
-                        } else {
-                            logger.error(`[JMComic PDF] 无法确定使用哪个文件，跳过此章节`);
-                            continue;
-                        }
-                    } catch (err) {
-                        logger.error(`[JMComic PDF] 读取目录失败:`, err);
-                        continue;
-                    }
+                    logger.error(`[JMComic PDF] 文件不存在，跳过: ${pdfPath}`);
+                    continue;
                 }
                 
-                logger.info(`[JMComic PDF] 最终使用路径: ${actualPdfPath}`);
-                
-                // 使用直接路径发送（不使用 file:// 协议）
-                // 直接传递文件路径给 segment.file，让框架自己处理
+                // 直接使用临时目录中的文件发送
                 forwardMsg.push({
                     message: [
                         `📄 第 ${result.start_chapter + i} 章 (${pdfSizeMB.toFixed(2)} MB)`,
-                        segment.file(actualPdfPath)  // 使用实际存在的文件路径
+                        segment.file(pdfPath)  // 直接使用临时目录中的文件
                     ],
                     nickname: `第${result.start_chapter + i}章`,
                     user_id: e.self_id
@@ -187,7 +173,7 @@ export class jmcomic_pdf extends plugin {
             
             logger.info(`[JMComic PDF] 用户 ${e.user_id} 成功接收相册 ${albumId} 的 ${result.pdf_count} 个PDF（转发形式）`);
             
-            // 延迟删除所有PDF文件
+            // 延迟删除所有PDF文件（已经在临时目录中）
             setTimeout(() => {
                 for (const pdfInfo of result.pdf_files) {
                     try {
@@ -196,8 +182,18 @@ export class jmcomic_pdf extends plugin {
                             logger.info(`[JMComic PDF] 已删除PDF: ${pdfInfo.filename}`);
                         }
                     } catch (error) {
-                        logger.error(`[JMComic PDF] 删除PDF文件失败: ${pdfInfo.filename}`, error);
+                        logger.error(`[JMComic PDF] 删除PDF失败: ${pdfInfo.filename}`, error);
                     }
+                }
+                
+                // 尝试删除临时目录（如果为空）
+                try {
+                    if (fs.existsSync(tempPdfDir) && fs.readdirSync(tempPdfDir).length === 0) {
+                        fs.rmdirSync(tempPdfDir);
+                        logger.info(`[JMComic PDF] 已删除临时目录: ${tempPdfDir}`);
+                    }
+                } catch (error) {
+                    // 忽略删除目录失败
                 }
             }, 30000); // 延迟30秒删除，确保用户有时间下载
             

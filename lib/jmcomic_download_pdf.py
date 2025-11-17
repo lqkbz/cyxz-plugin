@@ -35,10 +35,10 @@ logging.basicConfig(
     stream=sys.stderr
 )
 
-def download_and_convert_to_pdf(album_id, config_file=None, start_chapter=1, end_chapter=5):
+def download_and_convert_to_pdf(album_id, config_file=None, start_chapter=1, end_chapter=5, custom_pdf_dir=None):
     """
     下载漫画并使用 img2pdf 插件转换为PDF
-    直接使用配置文件中的 pdf_dir，不创建临时目录
+    可以指定自定义PDF保存目录，避免文件复制操作
     每章生成一个PDF，下载指定范围的章节
     
     Args:
@@ -46,6 +46,7 @@ def download_and_convert_to_pdf(album_id, config_file=None, start_chapter=1, end
         config_file: 配置文件路径（必须包含 img2pdf 插件配置）
         start_chapter: 起始章节（默认1）
         end_chapter: 结束章节（默认5）
+        custom_pdf_dir: 自定义PDF保存目录（可选，如果提供则覆盖配置文件中的 pdf_dir）
     
     Returns:
         dict: 包含PDF路径列表的字典
@@ -91,23 +92,33 @@ def download_and_convert_to_pdf(album_id, config_file=None, start_chapter=1, end
                             print(f"[INFO] 检测到 after_album 的 img2pdf 插件", file=sys.stderr)
                             break
         
-        if not pdf_dir:
+        if not pdf_dir and not custom_pdf_dir:
             raise Exception("配置文件中未找到 img2pdf 插件配置或 pdf_dir")
         
-        # 确保 pdf_dir 存在（相对于配置文件目录）
-        config_dir = os.path.dirname(os.path.abspath(config_file))
-        pdf_dir_abs = os.path.join(config_dir, pdf_dir) if not os.path.isabs(pdf_dir) else pdf_dir
+        # 如果提供了自定义目录，使用自定义目录；否则使用配置文件中的目录
+        if custom_pdf_dir:
+            pdf_dir_abs = os.path.abspath(custom_pdf_dir)
+            print(f"[INFO] 使用自定义PDF保存目录: {pdf_dir_abs}", file=sys.stderr)
+        else:
+            # 确保 pdf_dir 存在（相对于配置文件目录）
+            config_dir = os.path.dirname(os.path.abspath(config_file))
+            pdf_dir_abs = os.path.join(config_dir, pdf_dir) if not os.path.isabs(pdf_dir) else pdf_dir
+            print(f"[INFO] PDF 保存目录: {pdf_dir_abs}", file=sys.stderr)
+        
         os.makedirs(pdf_dir_abs, exist_ok=True)
         
-        print(f"[INFO] PDF 保存目录: {pdf_dir_abs}", file=sys.stderr)
-        
-        # 更新插件配置中的 pdf_dir 为绝对路径，确保 jmcomic 保存到正确位置
+        # 更新插件配置中的 pdf_dir 和 filename_rule
         if hasattr(option, 'plugins') and option.plugins:
             for timing, plugins in option.plugins.items():
                 for plugin_config in plugins:
                     if isinstance(plugin_config, dict) and plugin_config.get('plugin') == 'img2pdf':
                         plugin_config['kwargs']['pdf_dir'] = pdf_dir_abs
                         print(f"[INFO] 已将插件 pdf_dir 更新为绝对路径: {pdf_dir_abs}", file=sys.stderr)
+                        
+                        # 如果使用自定义目录，使用简化的文件名规则
+                        if custom_pdf_dir:
+                            plugin_config['kwargs']['filename_rule'] = 'Pid'  # 使用章节ID作为文件名
+                            print(f"[INFO] 已将文件名规则改为简化模式: Pid", file=sys.stderr)
         
         print(f"[INFO] 开始下载相册: {album_id}, 章节范围: {start_chapter}-{end_chapter}", file=sys.stderr)
         print(f"[INFO] img2pdf 插件将自动生成 PDF（每章一个PDF）", file=sys.stderr)
@@ -180,8 +191,12 @@ def download_and_convert_to_pdf(album_id, config_file=None, start_chapter=1, end
         
         print(f"[INFO] 下载完成，查找生成的PDF文件", file=sys.stderr)
         
-        # 查找生成的PDF文件（优先在绝对路径中查找）
+        # 查找生成的PDF文件（在指定的目录中查找）
+        print(f"[INFO] 在目录 {pdf_dir_abs} 中查找PDF", file=sys.stderr)
         pdf_files = glob.glob(os.path.join(pdf_dir_abs, '*.pdf'))
+        
+        if pdf_files:
+            print(f"[INFO] 在主目录 {pdf_dir_abs} 中找到 {len(pdf_files)} 个PDF", file=sys.stderr)
         
         # 如果没找到，尝试在相对路径中查找（备用方案）
         if not pdf_files:
@@ -349,8 +364,9 @@ def download_and_convert_to_pdf(album_id, config_file=None, start_chapter=1, end
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("使用方法: python jmcomic_download_pdf.py <album_id> [config_file] [start_chapter] [end_chapter]", file=sys.stderr)
+        print("使用方法: python jmcomic_download_pdf.py <album_id> [config_file] [start_chapter] [end_chapter] [custom_pdf_dir]", file=sys.stderr)
         print("示例: python jmcomic_download_pdf.py 422866 jmcomic_config.yml 1 5", file=sys.stderr)
+        print("示例: python jmcomic_download_pdf.py 422866 jmcomic_config.yml 1 5 /root/Yunzai/data/jmcomic_temp", file=sys.stderr)
         print("注意: 需要在配置文件中配置 img2pdf 插件", file=sys.stderr)
         sys.exit(1)
     
@@ -358,6 +374,7 @@ if __name__ == "__main__":
     config_file = sys.argv[2] if len(sys.argv) > 2 else None
     start_chapter = int(sys.argv[3]) if len(sys.argv) > 3 else 1  # 默认从第1章开始
     end_chapter = int(sys.argv[4]) if len(sys.argv) > 4 else 5    # 默认到第5章结束
+    custom_pdf_dir = sys.argv[5] if len(sys.argv) > 5 else None   # 自定义PDF目录
     
     # 自动查找默认配置
     if not config_file:
@@ -370,6 +387,6 @@ if __name__ == "__main__":
         print("[ERROR] 未找到配置文件", file=sys.stderr)
         sys.exit(1)
     
-    exit_code = download_and_convert_to_pdf(album_id, config_file, start_chapter, end_chapter)
+    exit_code = download_and_convert_to_pdf(album_id, config_file, start_chapter, end_chapter, custom_pdf_dir)
     sys.exit(exit_code)
 

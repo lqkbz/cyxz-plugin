@@ -209,6 +209,22 @@ def download_and_convert_to_pdf(album_id, config_file=None, start_chapter=1, end
         pdf_files = [os.path.abspath(f) for f in pdf_files]
         print(f"[INFO] 找到 {len(pdf_files)} 个PDF文件", file=sys.stderr)
         
+        # 验证所有文件是否真实存在
+        valid_pdf_files = []
+        for pdf_file in pdf_files:
+            if os.path.exists(pdf_file):
+                valid_pdf_files.append(pdf_file)
+                print(f"[INFO] ✓ 文件存在: {pdf_file}", file=sys.stderr)
+            else:
+                print(f"[WARN] ✗ 文件不存在: {pdf_file}", file=sys.stderr)
+        
+        if not valid_pdf_files:
+            print(f"[ERROR] 所有找到的 PDF 文件都不存在！", file=sys.stderr)
+            raise Exception("找到的PDF文件路径无效，文件实际不存在")
+        
+        pdf_files = valid_pdf_files
+        print(f"[INFO] 验证后有效文件: {len(pdf_files)} 个", file=sys.stderr)
+        
         # 按修改时间排序，确保顺序正确（最新生成的在最前）
         pdf_files.sort(key=lambda x: os.path.getmtime(x))
         
@@ -244,16 +260,27 @@ def download_and_convert_to_pdf(album_id, config_file=None, start_chapter=1, end
         print(f"[INFO] 章节模式：生成了 {len(pdf_files)} 个PDF文件", file=sys.stderr)
         print(f"[INFO] 总文件大小: {total_size / 1024 / 1024:.2f} MB", file=sys.stderr)
         
-        # 准备每个PDF的详细信息
+        # 准备每个PDF的详细信息（再次验证文件存在性）
         pdf_details = []
         for i, pdf_file in enumerate(pdf_files, 1):
+            # 再次确认文件存在
+            if not os.path.exists(pdf_file):
+                print(f"[ERROR] 文件突然消失: {pdf_file}", file=sys.stderr)
+                continue
+                
+            pdf_size = os.path.getsize(pdf_file)
+            pdf_basename = os.path.basename(pdf_file)
+            
             pdf_details.append({
                 "path": pdf_file,
-                "filename": os.path.basename(pdf_file),
-                "size": os.path.getsize(pdf_file),
+                "filename": pdf_basename,
+                "size": pdf_size,
                 "chapter_index": i
             })
-            print(f"[INFO] 第{i}章 PDF: {os.path.basename(pdf_file)} ({os.path.getsize(pdf_file) / 1024 / 1024:.2f} MB)", file=sys.stderr)
+            print(f"[INFO] 第{i}章 PDF: {pdf_basename}", file=sys.stderr)
+            print(f"       路径: {pdf_file}", file=sys.stderr)
+            print(f"       大小: {pdf_size / 1024 / 1024:.2f} MB", file=sys.stderr)
+            print(f"       存在: {os.path.exists(pdf_file)}", file=sys.stderr)
         
         # 返回结果（章节模式，返回所有PDF列表）
         result = {

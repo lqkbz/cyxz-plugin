@@ -102,18 +102,41 @@ export class jmcomic_pdf extends plugin {
                 const pdfSizeMB = pdfInfo.size / 1024 / 1024;
                 
                 logger.info(`[JMComic PDF] 准备转发第 ${i+1}/${result.pdf_count} 章: ${pdfFilename}`);
+                logger.info(`[JMComic PDF] PDF原始路径: ${pdfPath}`);
                 
-                // 使用 file:// 协议（兼容 Windows 和 Linux）
-                let normalizedPath = pdfPath.replace(/\\/g, '/');  // 统一使用正斜杠
-                // Linux 路径已经以 / 开头，Windows 路径不以 / 开头
-                const fileUrl = normalizedPath.startsWith('/') 
-                    ? `file://${normalizedPath}`      // Linux: file:// + /path
-                    : `file:///${normalizedPath}`;     // Windows: file:/// + C:/path
+                // 验证文件是否存在
+                let actualPdfPath = pdfPath;
+                if (!fs.existsSync(pdfPath)) {
+                    logger.error(`[JMComic PDF] 文件不存在: ${pdfPath}`);
+                    
+                    // 尝试查找实际文件（文件名可能被修改）
+                    try {
+                        const pdfDir = path.dirname(pdfPath);
+                        const actualFiles = fs.readdirSync(pdfDir).filter(f => f.endsWith('.pdf'));
+                        logger.info(`[JMComic PDF] PDF目录中的实际文件: ${actualFiles.join(', ')}`);
+                        
+                        // 如果只有一个PDF文件，使用它
+                        if (actualFiles.length === 1) {
+                            actualPdfPath = path.join(pdfDir, actualFiles[0]);
+                            logger.info(`[JMComic PDF] 使用实际文件: ${actualPdfPath}`);
+                        } else {
+                            logger.error(`[JMComic PDF] 无法确定使用哪个文件，跳过此章节`);
+                            continue;
+                        }
+                    } catch (err) {
+                        logger.error(`[JMComic PDF] 读取目录失败:`, err);
+                        continue;
+                    }
+                }
                 
+                logger.info(`[JMComic PDF] 最终使用路径: ${actualPdfPath}`);
+                
+                // 使用直接路径发送（不使用 file:// 协议）
+                // 直接传递文件路径给 segment.file，让框架自己处理
                 forwardMsg.push({
                     message: [
                         `📄 第 ${result.start_chapter + i} 章 (${pdfSizeMB.toFixed(2)} MB)`,
-                        segment.file(fileUrl)
+                        segment.file(actualPdfPath)  // 使用实际存在的文件路径
                     ],
                     nickname: `第${result.start_chapter + i}章`,
                     user_id: e.self_id

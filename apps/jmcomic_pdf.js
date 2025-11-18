@@ -64,12 +64,36 @@ export class jmcomic_pdf extends plugin {
         await e.reply(`宝贝别急`);
         
         try {
-            // 创建临时目录用于保存PDF（确保NapCat可以访问）
-            const tempPdfDir = path.join(process.cwd(), 'data', 'jmcomic_temp');
-            if (!fs.existsSync(tempPdfDir)) {
-                fs.mkdirSync(tempPdfDir, { recursive: true });
+            // 创建临时目录用于保存PDF（使用多个可能的共享位置）
+            // 优先级：
+            // 1. /root/Yunzai/temp/jmcomic/ (通常被共享)
+            // 2. /root/Yunzai/data/jmcomic_temp/
+            // 3. ./temp/jmcomic/
+            
+            let tempPdfDir;
+            const possibleDirs = [
+                '/root/Yunzai/temp/jmcomic',              // 最常见的共享目录
+                path.join(process.cwd(), 'temp', 'jmcomic'),  // 相对路径
+                path.join(process.cwd(), 'data', 'jmcomic_temp')
+            ];
+            
+            // 尝试每个目录，使用第一个可创建的
+            for (const dir of possibleDirs) {
+                try {
+                    if (!fs.existsSync(dir)) {
+                        fs.mkdirSync(dir, { recursive: true });
+                    }
+                    tempPdfDir = dir;
+                    logger.info(`[JMComic PDF] 使用临时PDF目录: ${tempPdfDir}`);
+                    break;
+                } catch (err) {
+                    logger.warn(`[JMComic PDF] 无法创建目录 ${dir}: ${err.message}`);
+                }
             }
-            logger.info(`[JMComic PDF] 临时PDF目录: ${tempPdfDir}`);
+            
+            if (!tempPdfDir) {
+                throw new Error('无法创建临时PDF目录');
+            }
             
             // 调用 Python 脚本下载并转换PDF（直接下载到临时目录）
             const messageType = e.group ? '群聊' : e.friend ? '私聊' : '未知';
@@ -101,7 +125,7 @@ export class jmcomic_pdf extends plugin {
                 user_id: e.self_id
             });
             
-            // 添加每个PDF文件（已经直接保存到临时目录）
+            // 添加每个PDF文件（读取为 Buffer 后发送，避免文件路径问题）
             for (let i = 0; i < result.pdf_files.length; i++) {
                 const pdfInfo = result.pdf_files[i];
                 const pdfPath = pdfInfo.path;
@@ -110,7 +134,6 @@ export class jmcomic_pdf extends plugin {
                 
                 logger.info(`[JMComic PDF] 准备转发第 ${i+1}/${result.pdf_count} 章: ${pdfFilename}`);
                 logger.info(`[JMComic PDF] PDF路径: ${pdfPath}`);
-                logger.info(`[JMComic PDF] 文件存在: ${fs.existsSync(pdfPath)}`);
                 
                 // 验证文件是否存在
                 if (!fs.existsSync(pdfPath)) {
@@ -118,15 +141,30 @@ export class jmcomic_pdf extends plugin {
                     continue;
                 }
                 
-                // 直接使用临时目录中的文件发送
-                forwardMsg.push({
-                    message: [
-                        `📄 第 ${result.start_chapter + i} 章 (${pdfSizeMB.toFixed(2)} MB)`,
-                        segment.file(pdfPath)  // 直接使用临时目录中的文件
-                    ],
-                    nickname: `第${result.start_chapter + i}章`,
-                    user_id: e.self_id
-                });
+                try {
+                    // 读取 PDF 文件为 Buffer（避免路径问题）
+                    const pdfBuffer = fs.readFileSync(pdfPath);
+                    logger.info(`[JMComic PDF] 已读取PDF为Buffer，大小: ${pdfBuffer.length} bytes`);
+                    
+                    // 生成简化的文件名（避免特殊字符）
+                    const simplifiedName = `chapter_${result.start_chapter + i}.pdf`;
+                    
+                    logger.info(`[JMComic PDF] 使用Buffer发送，文件名: ${simplifiedName}`);
+                    
+                    // 使用 Buffer 发送文件（不依赖文件系统路径）
+                    forwardMsg.push({
+                        message: [
+                            `📄 第 ${result.start_chapter + i} 章 (${pdfSizeMB.toFixed(2)} MB)`,
+                            segment.file(pdfBuffer, simplifiedName)  // 使用 Buffer + 简化文件名
+                        ],
+                        nickname: `第${result.start_chapter + i}章`,
+                        user_id: e.self_id
+                    });
+                    
+                } catch (readErr) {
+                    logger.error(`[JMComic PDF] 读取PDF文件失败: ${pdfFilename}`, readErr);
+                    continue;
+                }
             }
             
             // 发送转发消息（兼容不同版本）

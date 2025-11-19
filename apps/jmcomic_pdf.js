@@ -69,8 +69,7 @@ export class jmcomic_pdf extends plugin {
             // NapCat 容器会通过宿主机目录访问这些文件
             
             let tempPdfDir;
-            const possibleDirs = [
-                '/root/napcat/jmcomic_temp',              // NapCat 可访问的宿主机目录（推荐）
+            const possibleDirs = [           
                 '/root/napcat/QQ/jmcomic_temp',           // NapCat QQ 目录下
                 '/root/Yunzai/temp/jmcomic',              // Yunzai temp 目录
                 path.join(process.cwd(), 'temp', 'jmcomic')  // 相对路径备用

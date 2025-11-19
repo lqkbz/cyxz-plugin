@@ -142,13 +142,17 @@ export class jmcomic_pdf extends plugin {
                 // NapCat:  /app/.config/QQ/jmcomic/xxx.pdf
                 const napCatPath = hostPath.replace('/root/napcat/QQ', '/app/.config/QQ');
                 
-                logger.info(`[JMComic PDF] NapCat路径: ${napCatPath}`);
+                // 添加 file:// 协议（Linux 路径）
+                const napCatFileUrl = `file://${napCatPath}`;
                 
-                // 使用 NapCat 容器内的路径发送
+                logger.info(`[JMComic PDF] NapCat容器路径: ${napCatPath}`);
+                logger.info(`[JMComic PDF] NapCat文件URL: ${napCatFileUrl}`);
+                
+                // 使用 file:// 协议的 NapCat 路径发送
                 forwardMsg.push({
                     message: [
                         `📄 第 ${result.start_chapter + i} 章 (${pdfSizeMB.toFixed(2)} MB)`,
-                        segment.file(napCatPath)  // 使用 NapCat 容器内的路径
+                        segment.file(napCatFileUrl)  // 使用 file:// 协议
                     ],
                     nickname: `第${result.start_chapter + i}章`,
                     user_id: e.self_id

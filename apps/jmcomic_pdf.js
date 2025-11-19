@@ -64,45 +64,37 @@ export class jmcomic_pdf extends plugin {
         await e.reply(`宝贝别急`);
         
         try {
-            // 创建临时目录用于保存PDF
-            // 根据 NapCat 挂载配置，使用宿主机的 /root/napcat/jmcomic_temp/
-            // NapCat 容器会通过宿主机目录访问这些文件
+            // PDF 保存到宿主机的 /root/napcat/QQ/jmcomic/ 目录
+            // 根据 NapCat 挂载配置: -v "/root/napcat/QQ:/app/.config/QQ"
+            // 宿主机路径：/root/napcat/QQ/jmcomic/
+            // NapCat 看到的路径：/app/.config/QQ/jmcomic/
             
-            let tempPdfDir;
-            const possibleDirs = [           
-                '/root/napcat/QQ/jmcomic_temp',           // NapCat QQ 目录下
-                '/root/Yunzai/temp/jmcomic',              // Yunzai temp 目录
-                path.join(process.cwd(), 'temp', 'jmcomic')  // 相对路径备用
-            ];
+            const hostPdfDir = '/root/napcat/QQ/jmcomic';           // 宿主机实际保存路径
+            const napCatPdfDir = '/app/.config/QQ/jmcomic';         // NapCat 容器内路径
             
-            // 尝试每个目录，使用第一个可创建的
-            for (const dir of possibleDirs) {
-                try {
-                    if (!fs.existsSync(dir)) {
-                        fs.mkdirSync(dir, { recursive: true });
-                    }
-                    // 测试写入权限
-                    const testFile = path.join(dir, '.test');
-                    fs.writeFileSync(testFile, 'test');
-                    fs.unlinkSync(testFile);
-                    
-                    tempPdfDir = dir;
-                    logger.info(`[JMComic PDF] ✓ 使用临时PDF目录: ${tempPdfDir}`);
-                    break;
-                } catch (err) {
-                    logger.warn(`[JMComic PDF] ✗ 无法使用目录 ${dir}: ${err.message}`);
-                }
+            // 创建目录
+            if (!fs.existsSync(hostPdfDir)) {
+                fs.mkdirSync(hostPdfDir, { recursive: true });
+                logger.info(`[JMComic PDF] 创建PDF目录: ${hostPdfDir}`);
             }
             
-            if (!tempPdfDir) {
-                throw new Error('无法创建临时PDF目录，请检查目录权限');
+            // 测试目录可写性
+            try {
+                const testFile = path.join(hostPdfDir, '.test');
+                fs.writeFileSync(testFile, 'test');
+                fs.unlinkSync(testFile);
+                logger.info(`[JMComic PDF] ✓ PDF目录可写: ${hostPdfDir}`);
+            } catch (err) {
+                throw new Error(`PDF目录不可写: ${hostPdfDir}, 错误: ${err.message}`);
             }
             
-            // 调用 Python 脚本下载并转换PDF（直接下载到临时目录）
+            // 调用 Python 脚本下载并转换PDF（下载到宿主机目录）
             const messageType = e.group ? '群聊' : e.friend ? '私聊' : '未知';
             logger.info(`[JMComic PDF] 用户 ${e.user_id} 在${messageType}中开始下载相册 ${albumId}（第${startChapter}-${endChapter}章）`);
+            logger.info(`[JMComic PDF] 宿主机保存路径: ${hostPdfDir}`);
+            logger.info(`[JMComic PDF] NapCat容器路径: ${napCatPdfDir}`);
             
-            const result = await downloadJmComicAsPDF(albumId, null, startChapter, endChapter, tempPdfDir);
+            const result = await downloadJmComicAsPDF(albumId, null, startChapter, endChapter, hostPdfDir);
             
             // 检查返回结果
             if (!result.pdf_files || result.pdf_files.length === 0) {
@@ -128,28 +120,35 @@ export class jmcomic_pdf extends plugin {
                 user_id: e.self_id
             });
             
-            // 添加每个PDF文件（已经直接保存到临时目录）
+            // 添加每个PDF文件（路径转换：宿主机路径 → NapCat容器路径）
             for (let i = 0; i < result.pdf_files.length; i++) {
                 const pdfInfo = result.pdf_files[i];
-                const pdfPath = pdfInfo.path;
+                const hostPath = pdfInfo.path;          // 宿主机路径
                 const pdfFilename = pdfInfo.filename;
                 const pdfSizeMB = pdfInfo.size / 1024 / 1024;
                 
                 logger.info(`[JMComic PDF] 准备转发第 ${i+1}/${result.pdf_count} 章: ${pdfFilename}`);
-                logger.info(`[JMComic PDF] PDF路径: ${pdfPath}`);
-                logger.info(`[JMComic PDF] 文件存在: ${fs.existsSync(pdfPath)}`);
+                logger.info(`[JMComic PDF] 宿主机路径: ${hostPath}`);
+                logger.info(`[JMComic PDF] 文件存在: ${fs.existsSync(hostPath)}`);
                 
                 // 验证文件是否存在
-                if (!fs.existsSync(pdfPath)) {
-                    logger.error(`[JMComic PDF] 文件不存在，跳过: ${pdfPath}`);
+                if (!fs.existsSync(hostPath)) {
+                    logger.error(`[JMComic PDF] 文件不存在，跳过: ${hostPath}`);
                     continue;
                 }
                 
-                // 直接使用临时目录中的文件发送
+                // 将宿主机路径转换为 NapCat 容器内路径
+                // 宿主机: /root/napcat/QQ/jmcomic/xxx.pdf
+                // NapCat:  /app/.config/QQ/jmcomic/xxx.pdf
+                const napCatPath = hostPath.replace('/root/napcat/QQ', '/app/.config/QQ');
+                
+                logger.info(`[JMComic PDF] NapCat路径: ${napCatPath}`);
+                
+                // 使用 NapCat 容器内的路径发送
                 forwardMsg.push({
                     message: [
                         `📄 第 ${result.start_chapter + i} 章 (${pdfSizeMB.toFixed(2)} MB)`,
-                        segment.file(pdfPath)  // 直接使用临时目录中的文件
+                        segment.file(napCatPath)  // 使用 NapCat 容器内的路径
                     ],
                     nickname: `第${result.start_chapter + i}章`,
                     user_id: e.self_id
@@ -200,12 +199,14 @@ export class jmcomic_pdf extends plugin {
             
             logger.info(`[JMComic PDF] 用户 ${e.user_id} 成功接收相册 ${albumId} 的 ${result.pdf_count} 个PDF（转发形式）`);
             
-            // 延迟删除所有PDF文件（已经在临时目录中）
+            // 延迟删除所有PDF文件（从宿主机目录删除）
             setTimeout(() => {
                 for (const pdfInfo of result.pdf_files) {
                     try {
-                        if (fs.existsSync(pdfInfo.path)) {
-                            fs.unlinkSync(pdfInfo.path);
+                        // 从宿主机路径删除文件
+                        const hostPath = pdfInfo.path;
+                        if (fs.existsSync(hostPath)) {
+                            fs.unlinkSync(hostPath);
                             logger.info(`[JMComic PDF] 已删除PDF: ${pdfInfo.filename}`);
                         }
                     } catch (error) {
@@ -215,9 +216,9 @@ export class jmcomic_pdf extends plugin {
                 
                 // 尝试删除临时目录（如果为空）
                 try {
-                    if (fs.existsSync(tempPdfDir) && fs.readdirSync(tempPdfDir).length === 0) {
-                        fs.rmdirSync(tempPdfDir);
-                        logger.info(`[JMComic PDF] 已删除临时目录: ${tempPdfDir}`);
+                    if (fs.existsSync(hostPdfDir) && fs.readdirSync(hostPdfDir).length === 0) {
+                        fs.rmdirSync(hostPdfDir);
+                        logger.info(`[JMComic PDF] 已删除临时目录: ${hostPdfDir}`);
                     }
                 } catch (error) {
                     // 忽略删除目录失败

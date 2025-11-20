@@ -66,11 +66,11 @@ export class jmcomic_pdf extends plugin {
         try {
             // PDF 保存到共享目录
             // Yunzai 容器保存路径: /root/Yunzai/shared/jmcomic/
-            // NapCat 容器读取路径: /root/napcat/config/shared/jmcomic/
+            // NapCat 容器读取路径: /app/napcat/config/shared/jmcomic/
             // 这两个路径通过宿主机共享目录映射
             
             const yunzaiPdfDir = '/root/Yunzai/shared/jmcomic';           // Yunzai容器保存路径
-            const napCatPdfDir = '/root/napcat/config/shared/jmcomic';    // NapCat容器读取路径
+            const napCatPdfDir = '/app/napcat/config/shared/jmcomic';     // NapCat容器读取路径
             
             // 创建目录
             if (!fs.existsSync(yunzaiPdfDir)) {
@@ -139,8 +139,8 @@ export class jmcomic_pdf extends plugin {
                 
                 // 将 Yunzai 容器路径转换为 NapCat 容器路径
                 // Yunzai:  /root/Yunzai/shared/jmcomic/xxx.pdf
-                // NapCat:  /root/napcat/config/shared/jmcomic/xxx.pdf
-                const napCatPath = yunzaiPath.replace('/root/Yunzai/shared', '/root/napcat/config/shared');
+                // NapCat:  /app/napcat/config/shared/jmcomic/xxx.pdf
+                const napCatPath = yunzaiPath.replace('/root/Yunzai/shared', '/app/napcat/config/shared');
                 
                 // 添加 file:// 协议（Linux 路径）
                 const napCatFileUrl = `file://${napCatPath}`;

@@ -115,37 +115,34 @@ export class jmcomic_pdf extends plugin {
                 user_id: e.self_id
             });
             
-            // 添加每个PDF文件（两个容器共享同一路径，无需转换）
+            // 添加每个章节的信息（不包含文件，避免转发消息超时）
             for (let i = 0; i < result.pdf_files.length; i++) {
                 const pdfInfo = result.pdf_files[i];
-                const pdfPath = pdfInfo.path;
                 const pdfFilename = pdfInfo.filename;
                 const pdfSizeMB = pdfInfo.size / 1024 / 1024;
                 
-                logger.info(`[JMComic PDF] 准备转发第 ${i+1}/${result.pdf_count} 章: ${pdfFilename}`);
-                logger.info(`[JMComic PDF] PDF路径: ${pdfPath}`);
-                logger.info(`[JMComic PDF] 文件存在: ${fs.existsSync(pdfPath)}`);
-                
-                // 验证文件是否存在
-                if (!fs.existsSync(pdfPath)) {
-                    logger.error(`[JMComic PDF] 文件不存在，跳过: ${pdfPath}`);
-                    continue;
-                }
-                
-                // 添加 file:// 协议（Linux 路径）
-                const fileUrl = `file://${pdfPath}`;
-                logger.info(`[JMComic PDF] 文件URL: ${fileUrl}`);
-                
-                // 直接使用共享路径发送（两个容器都能访问）
+                // 只添加章节信息到转发消息（不包含文件）
                 forwardMsg.push({
-                    message: [
-                        `📄 第 ${result.start_chapter + i} 章 (${pdfSizeMB.toFixed(2)} MB)`,
-                        segment.file(fileUrl)
-                    ],
+                    message: `📄 第 ${result.start_chapter + i} 章\n文件名: ${pdfFilename}\n大小: ${pdfSizeMB.toFixed(2)} MB`,
                     nickname: `第${result.start_chapter + i}章`,
                     user_id: e.self_id
                 });
             }
+            
+            // 添加下载提示
+            forwardMsg.push({
+                message: [
+                    `✅ 全部准备完成！`,
+                    `\n━━━━━━━━━━━━━━━`,
+                    `\n📚 ${result.title}`,
+                    `\n📑 共 ${result.pdf_count} 个章节PDF`,
+                    `\n💾 总大小: ${totalSizeMB.toFixed(2)} MB`,
+                    `\n`,
+                    `\n⚠️ PDF文件将在下方单独发送`
+                ],
+                nickname: '📥 下载提示',
+                user_id: e.self_id
+            });
             
             // 发送转发消息（兼容不同版本）
             logger.info(`[JMComic PDF] 发送转发消息，共 ${forwardMsg.length} 条`);
@@ -189,7 +186,52 @@ export class jmcomic_pdf extends plugin {
                 }
             }
             
-            logger.info(`[JMComic PDF] 用户 ${e.user_id} 成功接收相册 ${albumId} 的 ${result.pdf_count} 个PDF（转发形式）`);
+            logger.info(`[JMComic PDF] 转发消息发送完成，开始发送PDF文件`);
+            
+            // 单独发送每个PDF文件（避免转发消息超时）
+            for (let i = 0; i < result.pdf_files.length; i++) {
+                const pdfInfo = result.pdf_files[i];
+                const pdfPath = pdfInfo.path;
+                const pdfFilename = pdfInfo.filename;
+                const pdfSizeMB = pdfInfo.size / 1024 / 1024;
+                
+                logger.info(`[JMComic PDF] 发送第 ${i+1}/${result.pdf_count} 章PDF: ${pdfFilename}`);
+                
+                // 验证文件是否存在
+                if (!fs.existsSync(pdfPath)) {
+                    logger.error(`[JMComic PDF] 文件不存在，跳过: ${pdfPath}`);
+                    await e.reply(`❌ 第 ${result.start_chapter + i} 章文件不存在`);
+                    continue;
+                }
+                
+                try {
+                    // 发送章节提示
+                    await e.reply(`📄 第 ${result.start_chapter + i} 章 (${pdfSizeMB.toFixed(2)} MB)`);
+                    
+                    // 添加 file:// 协议并发送
+                    const fileUrl = `file://${pdfPath}`;
+                    await e.reply(segment.file(fileUrl));
+                    
+                    logger.info(`[JMComic PDF] ✓ 第 ${i+1} 章发送成功`);
+                    
+                    // 每个文件间隔一下，避免发送过快
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                } catch (fileError) {
+                    logger.error(`[JMComic PDF] 发送第 ${i+1} 章失败:`, fileError);
+                    await e.reply(`❌ 第 ${result.start_chapter + i} 章发送失败: ${fileError.message}`);
+                }
+            }
+            
+            // 发送完成提示
+            await e.reply([
+                segment.at(e.user_id),
+                `\n✅ 全部发送完成！`,
+                `\n📚 ${result.title}`,
+                `\n📑 已发送 ${result.pdf_count} 个章节PDF`
+            ]);
+            
+            logger.info(`[JMComic PDF] 用户 ${e.user_id} 成功接收相册 ${albumId} 的 ${result.pdf_count} 个PDF`);
             
             // 延迟删除所有PDF文件
             setTimeout(() => {

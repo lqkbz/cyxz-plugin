@@ -64,37 +64,37 @@ export class jmcomic_pdf extends plugin {
         await e.reply(`宝贝别急`);
         
         try {
-            // PDF 保存到宿主机的 /root/napcat/QQ/jmcomic/ 目录
-            // 根据 NapCat 挂载配置: -v "/root/napcat/QQ:/app/.config/QQ"
-            // 宿主机路径：/root/napcat/QQ/jmcomic/
-            // NapCat 看到的路径：/app/.config/QQ/jmcomic/
+            // PDF 保存到共享目录
+            // Yunzai 容器保存路径: /root/Yunzai/shared/jmcomic/
+            // NapCat 容器读取路径: /root/napcat/config/shared/jmcomic/
+            // 这两个路径通过宿主机共享目录映射
             
-            const hostPdfDir = '/root/napcat/QQ/jmcomic';           // 宿主机实际保存路径
-            const napCatPdfDir = '/app/.config/QQ/jmcomic';         // NapCat 容器内路径
+            const yunzaiPdfDir = '/root/Yunzai/shared/jmcomic';           // Yunzai容器保存路径
+            const napCatPdfDir = '/root/napcat/config/shared/jmcomic';    // NapCat容器读取路径
             
             // 创建目录
-            if (!fs.existsSync(hostPdfDir)) {
-                fs.mkdirSync(hostPdfDir, { recursive: true });
-                logger.info(`[JMComic PDF] 创建PDF目录: ${hostPdfDir}`);
+            if (!fs.existsSync(yunzaiPdfDir)) {
+                fs.mkdirSync(yunzaiPdfDir, { recursive: true });
+                logger.info(`[JMComic PDF] 创建PDF目录: ${yunzaiPdfDir}`);
             }
             
             // 测试目录可写性
             try {
-                const testFile = path.join(hostPdfDir, '.test');
+                const testFile = path.join(yunzaiPdfDir, '.test');
                 fs.writeFileSync(testFile, 'test');
                 fs.unlinkSync(testFile);
-                logger.info(`[JMComic PDF] ✓ PDF目录可写: ${hostPdfDir}`);
+                logger.info(`[JMComic PDF] ✓ PDF目录可写: ${yunzaiPdfDir}`);
             } catch (err) {
-                throw new Error(`PDF目录不可写: ${hostPdfDir}, 错误: ${err.message}`);
+                throw new Error(`PDF目录不可写: ${yunzaiPdfDir}, 错误: ${err.message}`);
             }
             
-            // 调用 Python 脚本下载并转换PDF（下载到宿主机目录）
+            // 调用 Python 脚本下载并转换PDF（下载到共享目录）
             const messageType = e.group ? '群聊' : e.friend ? '私聊' : '未知';
             logger.info(`[JMComic PDF] 用户 ${e.user_id} 在${messageType}中开始下载相册 ${albumId}（第${startChapter}-${endChapter}章）`);
-            logger.info(`[JMComic PDF] 宿主机保存路径: ${hostPdfDir}`);
-            logger.info(`[JMComic PDF] NapCat容器路径: ${napCatPdfDir}`);
+            logger.info(`[JMComic PDF] Yunzai保存路径: ${yunzaiPdfDir}`);
+            logger.info(`[JMComic PDF] NapCat读取路径: ${napCatPdfDir}`);
             
-            const result = await downloadJmComicAsPDF(albumId, null, startChapter, endChapter, hostPdfDir);
+            const result = await downloadJmComicAsPDF(albumId, null, startChapter, endChapter, yunzaiPdfDir);
             
             // 检查返回结果
             if (!result.pdf_files || result.pdf_files.length === 0) {
@@ -120,32 +120,32 @@ export class jmcomic_pdf extends plugin {
                 user_id: e.self_id
             });
             
-            // 添加每个PDF文件（路径转换：宿主机路径 → NapCat容器路径）
+            // 添加每个PDF文件（路径转换：Yunzai路径 → NapCat路径）
             for (let i = 0; i < result.pdf_files.length; i++) {
                 const pdfInfo = result.pdf_files[i];
-                const hostPath = pdfInfo.path;          // 宿主机路径
+                const yunzaiPath = pdfInfo.path;        // Yunzai容器路径
                 const pdfFilename = pdfInfo.filename;
                 const pdfSizeMB = pdfInfo.size / 1024 / 1024;
                 
                 logger.info(`[JMComic PDF] 准备转发第 ${i+1}/${result.pdf_count} 章: ${pdfFilename}`);
-                logger.info(`[JMComic PDF] 宿主机路径: ${hostPath}`);
-                logger.info(`[JMComic PDF] 文件存在: ${fs.existsSync(hostPath)}`);
+                logger.info(`[JMComic PDF] Yunzai路径: ${yunzaiPath}`);
+                logger.info(`[JMComic PDF] 文件存在: ${fs.existsSync(yunzaiPath)}`);
                 
                 // 验证文件是否存在
-                if (!fs.existsSync(hostPath)) {
-                    logger.error(`[JMComic PDF] 文件不存在，跳过: ${hostPath}`);
+                if (!fs.existsSync(yunzaiPath)) {
+                    logger.error(`[JMComic PDF] 文件不存在，跳过: ${yunzaiPath}`);
                     continue;
                 }
                 
-                // 将宿主机路径转换为 NapCat 容器内路径
-                // 宿主机: /root/napcat/QQ/jmcomic/xxx.pdf
-                // NapCat:  /app/.config/QQ/jmcomic/xxx.pdf
-                const napCatPath = hostPath.replace('/root/napcat/QQ', '/app/.config/QQ');
+                // 将 Yunzai 容器路径转换为 NapCat 容器路径
+                // Yunzai:  /root/Yunzai/shared/jmcomic/xxx.pdf
+                // NapCat:  /root/napcat/config/shared/jmcomic/xxx.pdf
+                const napCatPath = yunzaiPath.replace('/root/Yunzai/shared', '/root/napcat/config/shared');
                 
                 // 添加 file:// 协议（Linux 路径）
                 const napCatFileUrl = `file://${napCatPath}`;
                 
-                logger.info(`[JMComic PDF] NapCat容器路径: ${napCatPath}`);
+                logger.info(`[JMComic PDF] NapCat路径: ${napCatPath}`);
                 logger.info(`[JMComic PDF] NapCat文件URL: ${napCatFileUrl}`);
                 
                 // 使用 file:// 协议的 NapCat 路径发送
@@ -203,14 +203,14 @@ export class jmcomic_pdf extends plugin {
             
             logger.info(`[JMComic PDF] 用户 ${e.user_id} 成功接收相册 ${albumId} 的 ${result.pdf_count} 个PDF（转发形式）`);
             
-            // 延迟删除所有PDF文件（从宿主机目录删除）
+            // 延迟删除所有PDF文件（从共享目录删除）
             setTimeout(() => {
                 for (const pdfInfo of result.pdf_files) {
                     try {
-                        // 从宿主机路径删除文件
-                        const hostPath = pdfInfo.path;
-                        if (fs.existsSync(hostPath)) {
-                            fs.unlinkSync(hostPath);
+                        // 从 Yunzai 路径删除文件
+                        const yunzaiPath = pdfInfo.path;
+                        if (fs.existsSync(yunzaiPath)) {
+                            fs.unlinkSync(yunzaiPath);
                             logger.info(`[JMComic PDF] 已删除PDF: ${pdfInfo.filename}`);
                         }
                     } catch (error) {
@@ -220,9 +220,9 @@ export class jmcomic_pdf extends plugin {
                 
                 // 尝试删除临时目录（如果为空）
                 try {
-                    if (fs.existsSync(hostPdfDir) && fs.readdirSync(hostPdfDir).length === 0) {
-                        fs.rmdirSync(hostPdfDir);
-                        logger.info(`[JMComic PDF] 已删除临时目录: ${hostPdfDir}`);
+                    if (fs.existsSync(yunzaiPdfDir) && fs.readdirSync(yunzaiPdfDir).length === 0) {
+                        fs.rmdirSync(yunzaiPdfDir);
+                        logger.info(`[JMComic PDF] 已删除临时目录: ${yunzaiPdfDir}`);
                     }
                 } catch (error) {
                     // 忽略删除目录失败
